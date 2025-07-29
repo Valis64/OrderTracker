@@ -93,6 +93,11 @@ class YBSScraperApp:
         self.log_text = scrolledtext.ScrolledText(self.root, height=10)
         self.log_text.pack(fill="both", expand=True, padx=10, pady=10)
 
+        # status indicator
+        self.status_var = tk.StringVar(value="Idle")
+        self.status_label = tk.Label(self.root, textvariable=self.status_var, anchor="w")
+        self.status_label.pack(fill="x", padx=10, pady=(0, 10))
+
         self.start_update_loop()
 
     def save_creds(self):
@@ -315,6 +320,7 @@ class YBSScraperApp:
             self.log_text.insert(tk.END, f"{order_num} - {ws} - {ts}\n")
 
     def update_loop(self):
+        self.status_var.set("Updating...")
         session = requests.Session()
         if self.do_login(session):
             self.update_orders(session)
@@ -325,8 +331,12 @@ class YBSScraperApp:
             except Exception:
                 pass
             self.refresh_log_display()
+            self.status_var.set(
+                f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
         else:
             messagebox.showerror("Login Failed", "Could not log in to YBS.")
+            self.status_var.set("Update failed")
         self.root.after(60000, self.update_loop)
 
     def start_update_loop(self):
