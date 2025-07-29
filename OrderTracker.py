@@ -5,8 +5,18 @@ from bs4 import BeautifulSoup
 import json
 import os
 import csv
+import sqlite3
+from datetime import datetime
 
 SETTINGS_FILE = "settings.json"
+DB_FILE = "orders.db"
+WORKSTATIONS = [
+    "Indigo",
+    "Laminate",
+    "Die Cutting ABG",
+    "Machine Glue",
+    "Shipping",
+]
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -23,6 +33,22 @@ class YBSScraperApp:
         self.root = root
         root.title("YBS Order Scraper")
         self.settings = load_settings()
+
+        # database setup
+        self.conn = sqlite3.connect(DB_FILE)
+        c = self.conn.cursor()
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS events (
+                order_num TEXT,
+                workstation TEXT,
+                timestamp TEXT,
+                UNIQUE(order_num, workstation, timestamp)
+            )
+            """
+        )
+        self.conn.commit()
+
         self.create_gui()
     
     def create_gui(self):
@@ -76,42 +102,85 @@ class YBSScraperApp:
         # Test success logic: update for your site's actual response!
         return "Logout" in response.text or response.url.endswith("/manage.html")
 
+    def parse_datetime(self, text):
+        try:
+            return datetime.strptime(text, "%m/%d/%y %H:%M")
+        except Exception:
+            return None
+
+    def update_orders(self, session):
+        url = "https://www.ybsnow.com/manage.html"
+        resp = session.get(url)
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        for row in soup.find_all("tr"):
+            cols = [col.get_text(strip=True) for col in row.find_all("td")]
+            if not cols:
+                continue
+            if not cols[0].startswith("YBS"):
+                continue
+            order_num = cols[0].split()[1]
+            timestamps = cols[-len(WORKSTATIONS) :]
+            for ws, ts in zip(WORKSTATIONS, timestamps):
+                dt = self.parse_datetime(ts)
+                if not dt:
+                    continue
+                iso = dt.isoformat(sep=" ")
+                cur = self.conn.cursor()
+                cur.execute(
+                    "INSERT OR IGNORE INTO events(order_num, workstation, timestamp) VALUES(?, ?, ?)",
+                    (order_num, ws, iso),
+                )
+                self.conn.commit()
+
+    def get_order_data(self, order_num):
+        cur = self.conn.cursor()
+        rows = list(
+            cur.execute(
+                "SELECT workstation, timestamp FROM events WHERE order_num=? ORDER BY timestamp",
+                (order_num,),
+            )
+        )
+        if not rows:
+            return []
+
+        parsed = [(ws, datetime.fromisoformat(ts)) for ws, ts in rows]
+        results = []
+        for i, (ws, dt) in enumerate(parsed):
+            dur = None
+            if i + 1 < len(parsed):
+                dur = (parsed[i + 1][1] - dt).total_seconds() / 3600.0
+            results.append((ws, dt.strftime("%m/%d/%y %H:%M"), dur))
+        return results
+
     def scrape_and_export(self):
         order_num = self.order_entry.get().strip()
         if not order_num:
             messagebox.showerror("Missing", "Please enter an order number.")
             return
-        
+
         session = requests.Session()
         if not self.do_login(session):
             messagebox.showerror("Error", "Login failed! Please check credentials.")
             return
 
-        url = "https://www.ybsnow.com/manage.html"
-        resp = session.get(url)
-        soup = BeautifulSoup(resp.text, "html.parser")
+        self.update_orders(session)
 
-        # Scrape table data: You must adjust this for your actual HTML table!
-        orders = []
-        for row in soup.find_all("tr"):
-            cols = [col.text.strip() for col in row.find_all("td")]
-            if order_num in "".join(cols):
-                orders.append(cols)
-        
-        if not orders:
-            messagebox.showinfo("Not Found", f"Order {order_num} not found.")
+        data = self.get_order_data(order_num)
+        if not data:
+            messagebox.showinfo("Not Found", f"Order {order_num} not found in database.")
             return
 
-        # Save to CSV
         file_path = filedialog.asksaveasfilename(
             defaultextension=".csv", filetypes=[("CSV Files", "*.csv")]
         )
         if file_path:
-            with open(file_path, "w", newline='') as csvfile:
+            with open(file_path, "w", newline="") as csvfile:
                 writer = csv.writer(csvfile)
-                for row in orders:
-                    writer.writerow(row)
-            messagebox.showinfo("Done", f"Exported {len(orders)} rows.")
+                writer.writerow(["Workstation", "Completed", "Time At Station (hours)"])
+                for ws, end_time, dur in data:
+                    writer.writerow([ws, end_time, f"{dur:.2f}" if dur is not None else ""])
+            messagebox.showinfo("Done", f"Exported order {order_num} data.")
 
 if __name__ == "__main__":
     root = tk.Tk()
