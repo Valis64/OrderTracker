@@ -227,7 +227,11 @@ class YBSScraperApp:
                 continue
             if not cols[0].startswith("YBS"):
                 continue
-            order_num = cols[0].split()[1]
+            parts = cols[0].split()
+            if len(parts) < 2:
+                logging.warning("Unexpected row format: %s", cols[0])
+                continue
+            order_num = parts[1]
             timestamps = cols[-len(WORKSTATIONS) :]
             for ws, ts in zip(WORKSTATIONS, timestamps):
                 dt = self.parse_datetime(ts)
