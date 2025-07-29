@@ -1,0 +1,21 @@
+# OrderTracker
+
+A Tkinter-based GUI application for tracking YBS orders. The script logs into the YBS website, scrapes order information, stores it in a SQLite database, and allows exporting order data to CSV.
+
+## Requirements
+
+- Python 3
+- See `requirements.txt` for Python package dependencies.
+
+## Setup
+
+1. Install the required packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Run the application:
+   ```bash
+   python OrderTracker.py
+   ```
+
+The program will prompt for YBS credentials. Once logged in, it will periodically scrape order data and store updates in a local SQLite database (`orders.db`). Use the "Scrape & Export Order" button to export an order's history as a CSV file.
