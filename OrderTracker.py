@@ -81,6 +81,9 @@ class YBSScraperApp:
         self.scrape_btn = tk.Button(self.frame, text="Scrape & Export Order", command=self.scrape_and_export)
         self.scrape_btn.grid(row=6, column=0, columnspan=2, pady=8)
 
+        self.view_btn = tk.Button(self.frame, text="View Orders", command=self.show_orders_window)
+        self.view_btn.grid(row=7, column=0, columnspan=2, pady=4)
+
         # HTML preview
         self.web = HTMLLabel(self.root, html="")
         self.web.pack(fill="both", expand=True, padx=10, pady=10)
@@ -225,6 +228,44 @@ class YBSScraperApp:
                 dur = (parsed[i + 1][1] - dt).total_seconds() / 3600.0
             results.append((ws, dt.strftime("%m/%d/%y %H:%M"), dur))
         return results
+
+    def show_orders_window(self):
+        """Display a list of order numbers stored in the database."""
+        win = tk.Toplevel(self.root)
+        win.title("Orders")
+
+        frame = tk.Frame(win)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        listbox = tk.Listbox(frame, width=20)
+        listbox.pack(side="left", fill="y")
+
+        scrollbar = tk.Scrollbar(frame, command=listbox.yview)
+        scrollbar.pack(side="left", fill="y")
+        listbox.config(yscrollcommand=scrollbar.set)
+
+        details = scrolledtext.ScrolledText(frame, width=50)
+        details.pack(side="left", fill="both", expand=True, padx=(10, 0))
+
+        cur = self.conn.cursor()
+        order_nums = [row[0] for row in cur.execute("SELECT DISTINCT order_num FROM events ORDER BY order_num")]
+        for num in order_nums:
+            listbox.insert(tk.END, num)
+
+        def on_select(event):
+            sel = listbox.curselection()
+            if not sel:
+                return
+            order = listbox.get(sel[0])
+            data = self.get_order_data(order)
+            details.delete("1.0", tk.END)
+            for ws, end_time, dur in data:
+                dur_str = f"{dur:.2f}" if dur is not None else ""
+                details.insert(tk.END, f"{ws} - {end_time} - {dur_str}\n")
+
+        listbox.bind("<<ListboxSelect>>", on_select)
+
+        tk.Button(win, text="Close", command=win.destroy).pack(pady=4)
 
     def refresh_log_display(self):
         cur = self.conn.cursor()
