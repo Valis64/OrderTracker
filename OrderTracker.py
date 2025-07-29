@@ -66,18 +66,20 @@ class YBSScraperApp:
         self.password.grid(row=1, column=1)
         self.password.insert(0, self.settings.get("password", ""))
 
+        tk.Label(self.frame, text="Base URL:").grid(row=2, column=0, sticky="e")
+        self.base_url = tk.Entry(self.frame)
+        self.base_url.grid(row=2, column=1)
+        self.base_url.insert(0, self.settings.get("base_url", "https://www.ybsnow.com"))
+
         self.save_btn = tk.Button(self.frame, text="Save Credentials", command=self.save_creds)
-        self.save_btn.grid(row=2, column=0, columnspan=2, pady=4)
-
+        self.save_btn.grid(row=3, column=0, columnspan=2, pady=4)
         self.test_btn = tk.Button(self.frame, text="Test Login", command=self.test_login)
-        self.test_btn.grid(row=3, column=0, columnspan=2, pady=4)
-
-        tk.Label(self.frame, text="Order Number:").grid(row=4, column=0, sticky="e")
+        self.test_btn.grid(row=4, column=0, columnspan=2, pady=4)
+        tk.Label(self.frame, text="Order Number:").grid(row=5, column=0, sticky="e")
         self.order_entry = tk.Entry(self.frame)
-        self.order_entry.grid(row=4, column=1)
-
+        self.order_entry.grid(row=5, column=1)
         self.scrape_btn = tk.Button(self.frame, text="Scrape & Export Order", command=self.scrape_and_export)
-        self.scrape_btn.grid(row=5, column=0, columnspan=2, pady=8)
+        self.scrape_btn.grid(row=6, column=0, columnspan=2, pady=8)
 
         # HTML preview
         self.web = HTMLLabel(self.root, html="")
@@ -92,6 +94,7 @@ class YBSScraperApp:
     def save_creds(self):
         self.settings["username"] = self.username.get()
         self.settings["password"] = self.password.get()
+        self.settings["base_url"] = self.base_url.get()
         save_settings(self.settings)
         messagebox.showinfo("Saved", "Credentials saved.")
 
@@ -104,7 +107,8 @@ class YBSScraperApp:
 
     def do_login(self, session):
         # Adjust login logic to match the website form fields!
-        login_url = "https://www.ybsnow.com/login.html"  # update as needed
+        base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
+        login_url = f"{base}/login.html"
         data = {
             "username": self.settings.get("username"),
             "password": self.settings.get("password")
@@ -120,7 +124,8 @@ class YBSScraperApp:
             return None
 
     def update_orders(self, session):
-        url = "https://www.ybsnow.com/manage.html"
+        base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
+        url = f"{base}/manage.html"
         resp = session.get(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -180,7 +185,8 @@ class YBSScraperApp:
         if self.do_login(session):
             self.update_orders(session)
             try:
-                page = session.get("https://www.ybsnow.com/manage.html")
+                base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
+                page = session.get(f"{base}/manage.html")
                 self.web.set_html(page.text)
             except Exception:
                 pass
