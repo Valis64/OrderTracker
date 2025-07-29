@@ -1,6 +1,6 @@
 # OrderTracker
 
-A Tkinter-based GUI application for tracking YBS orders. The script logs into the YBS website, scrapes order information, stores it in a SQLite database, and allows exporting order data to CSV.
+A Tkinter-based GUI application for tracking YBS orders. The script logs into the YBS website, scrapes order information, stores it in a SQLite database, and allows exporting order data to CSV. The login routine parses the live login form and checks a protected page to verify successful authentication.
 
 ## Requirements
 

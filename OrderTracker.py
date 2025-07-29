@@ -122,9 +122,15 @@ class YBSScraperApp:
         # Retrieve the login page so we can parse the form and any hidden fields
         login_page = session.get(base)
         soup = BeautifulSoup(login_page.text, "html.parser")
-        form = soup.find("form")
+
+        # find a form that contains a password input
+        form = None
+        for f in soup.find_all("form"):
+            if f.find("input", {"type": "password"}):
+                form = f
+                break
         if not form:
-            print("Login form not found.")
+            print("Login form not found on page")
             return False
 
         action = form.get("action", "/login.html")
@@ -144,11 +150,29 @@ class YBSScraperApp:
                 data[name] = value
 
         response = session.post(login_url, data=data)
-        success = response.status_code == 200 and (
-            "logout" in response.text.lower() or "/manage" in response.url
+        logged_in = False
+        if response.status_code == 200:
+            text_lower = response.text.lower()
+            # if the login form still exists, assume failure
+            soup_after = BeautifulSoup(response.text, "html.parser")
+            login_form = None
+            for f in soup_after.find_all("form"):
+                if f.find("input", {"type": "password"}):
+                    login_form = f
+                    break
+            if login_form is None:
+                logged_in = True
+            if "logout" in text_lower or "/manage" in response.url:
+                logged_in = True
+            if not logged_in:
+                # request a known protected page to double check
+                manage = session.get(f"{base}/manage.html")
+                if manage.status_code == 200 and "login" not in manage.url.lower():
+                    logged_in = True
+        print(
+            f"Login POST to {login_url} returned {response.status_code}, logged_in={logged_in}, url={response.url}"
         )
-        print(f"Login POST to {login_url} returned {response.status_code}, success={success}")
-        return success
+        return logged_in
 
     def parse_datetime(self, text):
         try:
