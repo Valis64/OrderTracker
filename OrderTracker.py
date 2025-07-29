@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, scrolledtext
+from tkhtmlview import HTMLLabel
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -78,6 +79,16 @@ class YBSScraperApp:
         self.scrape_btn = tk.Button(self.frame, text="Scrape & Export Order", command=self.scrape_and_export)
         self.scrape_btn.grid(row=5, column=0, columnspan=2, pady=8)
 
+        # HTML preview
+        self.web = HTMLLabel(self.root, html="")
+        self.web.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # log of latest events
+        self.log_text = scrolledtext.ScrolledText(self.root, height=10)
+        self.log_text.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.start_update_loop()
+
     def save_creds(self):
         self.settings["username"] = self.username.get()
         self.settings["password"] = self.password.get()
@@ -152,6 +163,32 @@ class YBSScraperApp:
                 dur = (parsed[i + 1][1] - dt).total_seconds() / 3600.0
             results.append((ws, dt.strftime("%m/%d/%y %H:%M"), dur))
         return results
+
+    def refresh_log_display(self):
+        cur = self.conn.cursor()
+        rows = list(
+            cur.execute(
+                "SELECT order_num, workstation, timestamp FROM events ORDER BY timestamp DESC LIMIT 10"
+            )
+        )
+        self.log_text.delete("1.0", tk.END)
+        for order_num, ws, ts in rows:
+            self.log_text.insert(tk.END, f"{order_num} - {ws} - {ts}\n")
+
+    def update_loop(self):
+        session = requests.Session()
+        if self.do_login(session):
+            self.update_orders(session)
+            try:
+                page = session.get("https://www.ybsnow.com/manage.html")
+                self.web.set_html(page.text)
+            except Exception:
+                pass
+            self.refresh_log_display()
+        self.root.after(60000, self.update_loop)
+
+    def start_update_loop(self):
+        self.root.after(0, self.update_loop)
 
     def scrape_and_export(self):
         order_num = self.order_entry.get().strip()
