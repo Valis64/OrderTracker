@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog, scrolledtext
-from tkhtmlview import HTMLLabel
+from tkhtmlview import HTMLScrolledText
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -85,8 +85,8 @@ class YBSScraperApp:
         self.view_btn = tk.Button(self.frame, text="View Orders", command=self.show_orders_window)
         self.view_btn.grid(row=7, column=0, columnspan=2, pady=4)
 
-        # HTML preview
-        self.web = HTMLLabel(self.root, html="")
+        # HTML preview with scrolling
+        self.web = HTMLScrolledText(self.root, html="")
         self.web.pack(fill="both", expand=True, padx=10, pady=10)
 
         # log of latest events
