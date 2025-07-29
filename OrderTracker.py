@@ -8,6 +8,7 @@ import os
 import csv
 import sqlite3
 from datetime import datetime
+import logging
 
 SETTINGS_FILE = "settings.json"
 DB_FILE = "orders.db"
@@ -190,10 +191,25 @@ class YBSScraperApp:
         return logged_in
 
     def parse_datetime(self, text):
-        try:
-            return datetime.strptime(text, "%m/%d/%y %H:%M")
-        except Exception:
-            return None
+        """Parse timestamps using several known formats.
+
+        Returns a ``datetime`` object or ``None`` if ``text`` does not match any
+        supported format. Unknown strings are logged using ``logging.warning``.
+        """
+
+        formats = [
+            "%m/%d/%y %H:%M",
+            "%m/%d/%y %H:%M:%S",
+            "%m/%d/%y %I:%M %p",
+            "%m/%d/%y %I:%M:%S %p",
+        ]
+        for fmt in formats:
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+        logging.warning("Unrecognized datetime format: %s", text)
+        return None
 
     def update_orders(self, session):
         base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
