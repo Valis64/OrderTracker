@@ -89,6 +89,19 @@ class YBSScraperApp:
         self.web = HTMLScrolledText(self.root, html="")
         self.web.pack(fill="both", expand=True, padx=10, pady=10)
 
+        # last record display
+        self.last_frame = tk.Frame(self.root)
+        self.last_frame.pack(fill="x", padx=10, pady=(0, 10))
+        tk.Label(self.last_frame, text="Order #:").grid(row=0, column=0, sticky="e")
+        self.last_order_entry = tk.Entry(self.last_frame, state="readonly", width=15)
+        self.last_order_entry.grid(row=0, column=1, padx=(0, 10))
+        tk.Label(self.last_frame, text="Workstation:").grid(row=0, column=2, sticky="e")
+        self.last_ws_entry = tk.Entry(self.last_frame, state="readonly", width=20)
+        self.last_ws_entry.grid(row=0, column=3, padx=(0, 10))
+        tk.Label(self.last_frame, text="Timestamp:").grid(row=0, column=4, sticky="e")
+        self.last_ts_entry = tk.Entry(self.last_frame, state="readonly", width=25)
+        self.last_ts_entry.grid(row=0, column=5)
+
         # log of latest events
         self.log_text = scrolledtext.ScrolledText(self.root, height=10)
         self.log_text.pack(fill="both", expand=True, padx=10, pady=10)
@@ -319,6 +332,19 @@ class YBSScraperApp:
         for order_num, ws, ts in rows:
             self.log_text.insert(tk.END, f"{order_num} - {ws} - {ts}\n")
 
+    def refresh_last_record(self):
+        cur = self.conn.cursor()
+        row = cur.execute(
+            "SELECT order_num, workstation, timestamp FROM events ORDER BY timestamp DESC LIMIT 1"
+        ).fetchone()
+        values = row if row else ("", "", "")
+        widgets = [self.last_order_entry, self.last_ws_entry, self.last_ts_entry]
+        for widget, value in zip(widgets, values):
+            widget.config(state="normal")
+            widget.delete(0, tk.END)
+            widget.insert(0, value)
+            widget.config(state="readonly")
+
     def update_loop(self):
         self.status_var.set("Updating...")
         session = requests.Session()
@@ -331,6 +357,7 @@ class YBSScraperApp:
             except Exception:
                 pass
             self.refresh_log_display()
+            self.refresh_last_record()
             self.status_var.set(
                 f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
