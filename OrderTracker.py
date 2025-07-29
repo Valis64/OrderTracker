@@ -100,18 +100,28 @@ class YBSScraperApp:
 
     def test_login(self):
         session = requests.Session()
-        if self.do_login(session):
+        username = self.username.get()
+        password = self.password.get()
+        base_url = self.base_url.get()
+        if self.do_login(session, username=username, password=password, base_url=base_url):
             messagebox.showinfo("Login Test", "Login successful!")
         else:
             messagebox.showerror("Login Test", "Login failed.")
 
-    def do_login(self, session):
+    def do_login(self, session, username=None, password=None, base_url=None):
         # Adjust login logic to match the website form fields!
-        base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
+        if username is None:
+            username = self.settings.get("username")
+        if password is None:
+            password = self.settings.get("password")
+        if base_url is None:
+            base_url = self.settings.get("base_url", "https://www.ybsnow.com")
+
+        base = base_url.rstrip("/")
         login_url = f"{base}/login.html"
         data = {
-            "username": self.settings.get("username"),
-            "password": self.settings.get("password")
+            "username": username,
+            "password": password
         }
         response = session.post(login_url, data=data)
         # Test success logic: update for your site's actual response!
