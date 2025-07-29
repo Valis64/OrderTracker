@@ -289,6 +289,8 @@ class YBSScraperApp:
             except Exception:
                 pass
             self.refresh_log_display()
+        else:
+            messagebox.showerror("Login Failed", "Could not log in to YBS.")
         self.root.after(60000, self.update_loop)
 
     def start_update_loop(self):
