@@ -123,7 +123,11 @@ class YBSScraperApp:
         base = base_url.rstrip("/")
 
         # Retrieve the login page so we can parse the form and any hidden fields
-        login_page = session.get(base)
+        try:
+            login_page = session.get(base)
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Network Error", f"Failed to fetch login page: {e}")
+            return False
         soup = BeautifulSoup(login_page.text, "html.parser")
 
         # find a form that contains a password input
@@ -152,7 +156,11 @@ class YBSScraperApp:
             else:
                 data[name] = value
 
-        response = session.post(login_url, data=data)
+        try:
+            response = session.post(login_url, data=data)
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Network Error", f"Login request failed: {e}")
+            return False
         logged_in = False
         if response.status_code == 200:
             text_lower = response.text.lower()
@@ -169,7 +177,11 @@ class YBSScraperApp:
                 logged_in = True
             if not logged_in:
                 # request a known protected page to double check
-                manage = session.get(f"{base}/manage.html")
+                try:
+                    manage = session.get(f"{base}/manage.html")
+                except requests.exceptions.RequestException as e:
+                    messagebox.showerror("Network Error", f"Failed to verify login: {e}")
+                    return False
                 if manage.status_code == 200 and "login" not in manage.url.lower():
                     logged_in = True
         print(
@@ -186,7 +198,11 @@ class YBSScraperApp:
     def update_orders(self, session):
         base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
         url = f"{base}/manage.html"
-        resp = session.get(url)
+        try:
+            resp = session.get(url)
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Network Error", f"Failed to update orders: {e}")
+            return
         soup = BeautifulSoup(resp.text, "html.parser")
 
         for row in soup.find_all("tr"):
