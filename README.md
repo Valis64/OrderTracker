@@ -19,3 +19,4 @@ A Tkinter-based GUI application for tracking YBS orders. The script logs into th
    ```
 
 The program will prompt for YBS credentials. Once logged in, it will periodically scrape order data and store updates in a local SQLite database (`orders.db`). Use the "Scrape & Export Order" button to export an order's history as a CSV file.
+The login screen also includes a **Base URL** field for the YBS site. If left blank, it defaults to `https://www.ybsnow.com`.
