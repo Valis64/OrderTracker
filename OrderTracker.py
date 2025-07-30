@@ -34,6 +34,7 @@ class YBSScraperApp:
         self.root = root
         root.title("YBS Order Scraper")
         self.settings = load_settings()
+        self.latest_orders = []
 
         # database setup
         self.conn = sqlite3.connect(DB_FILE)
@@ -56,6 +57,8 @@ class YBSScraperApp:
         if self.settings.get("username") and self.settings.get("password"):
             try:
                 self.update_once()
+                if self.latest_orders:
+                    self.show_loaded_orders_window()
             except Exception as e:
                 logging.exception("Initial load failed: %s", e)
     
@@ -93,6 +96,11 @@ class YBSScraperApp:
 
         self.fetch_btn = tk.Button(self.frame, text="Fetch Orders Now", command=self.manual_fetch)
         self.fetch_btn.grid(row=8, column=0, columnspan=2, pady=4)
+
+        self.loaded_btn = tk.Button(
+            self.frame, text="Show Loaded Orders", command=self.show_loaded_orders_window
+        )
+        self.loaded_btn.grid(row=9, column=0, columnspan=2, pady=4)
 
         # last record display
         self.last_frame = tk.Frame(self.root)
@@ -250,6 +258,7 @@ class YBSScraperApp:
         soup = BeautifulSoup(resp.text, "html.parser")
 
         inserted = 0
+        order_nums = []
         cur = self.conn.cursor()
         for row in soup.find_all("tr"):
             cols = [col.get_text(strip=True) for col in row.find_all("td")]
@@ -262,6 +271,8 @@ class YBSScraperApp:
                 logging.warning("Unexpected row format: %s", cols[0])
                 continue
             order_num = parts[1]
+            if order_num not in order_nums:
+                order_nums.append(order_num)
             timestamps = cols[-len(WORKSTATIONS) :]
             for ws, ts in zip(WORKSTATIONS, timestamps):
                 dt = self.parse_datetime(ts)
@@ -276,6 +287,7 @@ class YBSScraperApp:
                     inserted += 1
 
         self.conn.commit()
+        self.latest_orders = order_nums
         return inserted
 
     def get_order_data(self, order_num):
@@ -335,6 +347,19 @@ class YBSScraperApp:
         listbox.bind("<<ListboxSelect>>", on_select)
 
         tk.Button(win, text="Close", command=win.destroy).pack(pady=4)
+
+    def show_loaded_orders_window(self):
+        """Show the orders retrieved during the most recent update."""
+        win = tk.Toplevel(self.root)
+        win.title("Loaded Orders")
+
+        text = scrolledtext.ScrolledText(win, width=30, height=20)
+        text.pack(fill="both", expand=True, padx=10, pady=10)
+
+        for num in self.latest_orders:
+            text.insert(tk.END, num + "\n")
+
+        tk.Button(win, text="Close", command=win.destroy).pack(pady=(0, 10))
 
     def refresh_log_display(self):
         cur = self.conn.cursor()
@@ -402,6 +427,8 @@ class YBSScraperApp:
     def manual_fetch(self):
         """Handler for the Fetch Orders Now button."""
         self.update_once()
+        if self.latest_orders:
+            self.show_loaded_orders_window()
 
     def scrape_and_export(self):
         order_num = self.order_entry.get().strip()
