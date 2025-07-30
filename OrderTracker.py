@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog, scrolledtext, ttk
 import requests
+import threading
 from bs4 import BeautifulSoup
 import json
 import os
@@ -169,9 +170,11 @@ class YBSScraperApp:
 
         # Retrieve the login page so we can parse the form and any hidden fields
         try:
+            login_page = session.get(base, timeout=10)
+        except TypeError:
             login_page = session.get(base)
         except requests.exceptions.RequestException as e:
-            messagebox.showerror("Network Error", f"Failed to fetch login page: {e}")
+            logging.error("Failed to fetch login page: %s", e)
             return False
         soup = BeautifulSoup(login_page.text, "html.parser")
 
@@ -202,9 +205,11 @@ class YBSScraperApp:
                 data[name] = value
 
         try:
+            response = session.post(login_url, data=data, timeout=10)
+        except TypeError:
             response = session.post(login_url, data=data)
         except requests.exceptions.RequestException as e:
-            messagebox.showerror("Network Error", f"Login request failed: {e}")
+            logging.error("Login request failed: %s", e)
             return False
         logged_in = False
         if response.status_code == 200:
@@ -223,9 +228,11 @@ class YBSScraperApp:
             if not logged_in:
                 # request a known protected page to double check
                 try:
+                    manage = session.get(f"{base}/manage.html", timeout=10)
+                except TypeError:
                     manage = session.get(f"{base}/manage.html")
                 except requests.exceptions.RequestException as e:
-                    messagebox.showerror("Network Error", f"Failed to verify login: {e}")
+                    logging.error("Failed to verify login: %s", e)
                     return False
                 if manage.status_code == 200 and "login" not in manage.url.lower():
                     logged_in = True
@@ -263,9 +270,11 @@ class YBSScraperApp:
         base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
         url = f"{base}/manage.html"
         try:
+            resp = session.get(url, timeout=10)
+        except TypeError:
             resp = session.get(url)
         except requests.exceptions.RequestException as e:
-            messagebox.showerror("Network Error", f"Failed to update orders: {e}")
+            logging.error("Failed to update orders: %s", e)
             return 0
 
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -532,7 +541,7 @@ class YBSScraperApp:
         self.activity_text.see(tk.END)
         self.activity_text.config(state="disabled")
 
-    def update_once(self):
+    def update_once(self, silent=False):
         """Fetch the manage page and update order data."""
         self.status_var.set("Updating...")
         self.log_activity("Fetching orders")
@@ -542,6 +551,8 @@ class YBSScraperApp:
             # fetch page to keep session current but ignore contents
             base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
             try:
+                session.get(f"{base}/manage.html", timeout=10)
+            except TypeError:
                 session.get(f"{base}/manage.html")
             except Exception:
                 pass
@@ -554,12 +565,15 @@ class YBSScraperApp:
             )
             self.log_activity(f"Update complete ({new_events} new events)")
         else:
-            messagebox.showerror("Login Failed", "Could not log in to YBS.")
+            if not silent:
+                messagebox.showerror("Login Failed", "Could not log in to YBS.")
+            else:
+                logging.error("Could not log in to YBS.")
             self.status_var.set("Update failed")
             self.log_activity("Login failed")
 
     def update_loop(self):
-        self.update_once()
+        threading.Thread(target=lambda: self.update_once(silent=True), daemon=True).start()
         self.root.after(60000, self.update_loop)
 
     def start_update_loop(self):
