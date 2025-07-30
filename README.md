@@ -24,5 +24,6 @@ The login screen also includes a **Base URL** field for the YBS site. If left bl
 When the application launches it also opens a small browser frame attached to
 the right of the main interface. This frame displays `manage.html` from the YBS
 site using the `tkinterweb` widget so you can monitor the page directly within
-the application. The page is scaled down and includes scrollbars for easier
-navigation.
+the application. The browser is loaded using the application's authenticated
+session so it remains logged in. The scraper always pulls data from
+`manage.html`, never from the login page.
