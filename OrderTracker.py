@@ -67,6 +67,7 @@ class YBSScraperApp:
         )
         self.conn.commit()
 
+        self.session = None
         self.create_gui()
 
         # Load current orders immediately if credentials are available.
@@ -172,8 +173,8 @@ class YBSScraperApp:
         if not getattr(self, "manage_html_frame", None):
             return
         if session is None:
-            session = requests.Session()
-            if not self.do_login(session):
+            session = self.get_authenticated_session()
+            if session is None:
                 base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
                 self.manage_html_frame.load_website(f"{base}/manage.html")
                 return
@@ -215,6 +216,11 @@ class YBSScraperApp:
             base_url = self.settings.get("base_url", "https://www.ybsnow.com")
 
         base = base_url.rstrip("/")
+        session.headers.setdefault(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        )
 
         # Retrieve the login page so we can parse the form and any hidden fields
         try:
@@ -287,7 +293,32 @@ class YBSScraperApp:
         print(
             f"Login POST to {login_url} returned {response.status_code}, logged_in={logged_in}, url={response.url}"
         )
+        if logged_in:
+            self.session = session
         return logged_in
+
+    def is_logged_in(self, session):
+        """Return ``True`` if ``session`` appears to already be authenticated."""
+        base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
+        try:
+            resp = session.get(f"{base}/manage.html", timeout=10)
+        except TypeError:
+            resp = session.get(f"{base}/manage.html")
+        except Exception:
+            return False
+        if "login" in resp.url.lower() or "type=\"password\"" in resp.text.lower():
+            return False
+        return True
+
+    def get_authenticated_session(self):
+        """Return a ``requests.Session`` logged into YBS, creating or refreshing
+        as needed."""
+        if self.session is None:
+            self.session = requests.Session()
+        if not self.is_logged_in(self.session):
+            if not self.do_login(self.session):
+                return None
+        return self.session
 
     def parse_datetime(self, text):
         """Parse timestamps using several known formats.
@@ -604,8 +635,8 @@ class YBSScraperApp:
         """Fetch the manage page and update order data."""
         self.status_var.set("Updating...")
         self.log_activity("Fetching orders")
-        session = requests.Session()
-        if self.do_login(session):
+        session = self.get_authenticated_session()
+        if session:
             new_events = self.update_orders(session)
             # fetch page to keep session current but ignore contents
             base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
@@ -649,8 +680,8 @@ class YBSScraperApp:
             messagebox.showerror("Missing", "Please enter an order number.")
             return
 
-        session = requests.Session()
-        if not self.do_login(session):
+        session = self.get_authenticated_session()
+        if not session:
             messagebox.showerror("Error", "Login failed! Please check credentials.")
             return
         self.update_orders(session)

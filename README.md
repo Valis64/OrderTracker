@@ -25,5 +25,6 @@ When the application launches it also opens a small browser frame attached to
 the right of the main interface. This frame displays `manage.html` from the YBS
 site using the `tkinterweb` widget so you can monitor the page directly within
 the application. The browser is loaded using the application's authenticated
-session so it remains logged in. The scraper always pulls data from
-`manage.html`, never from the login page.
+session so it remains logged in. The application now keeps this session alive
+between updates so you no longer get redirected back to the login page. The
+scraper always pulls data from `manage.html`, never from the login page.
