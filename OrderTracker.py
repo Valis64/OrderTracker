@@ -230,9 +230,9 @@ class YBSScraperApp:
             if not logged_in:
                 # request a known protected page to double check
                 try:
-                    manage = session.get(f"{base}/manage.php", timeout=10)
+                    manage = session.get(f"{base}/manage.html", timeout=10)
                 except TypeError:
-                    manage = session.get(f"{base}/manage.php")
+                    manage = session.get(f"{base}/manage.html")
                 except requests.exceptions.RequestException as e:
                     logging.error("Failed to verify login: %s", e)
                     return False
@@ -270,7 +270,7 @@ class YBSScraperApp:
 
     def update_orders(self, session):
         base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
-        url = f"{base}/manage.php"
+        url = f"{base}/manage.html"
         try:
             resp = session.get(url, timeout=10)
         except TypeError:
@@ -561,9 +561,9 @@ class YBSScraperApp:
             # fetch page to keep session current but ignore contents
             base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
             try:
-                self.session.get(f"{base}/manage.php", timeout=10)
+                self.session.get(f"{base}/manage.html", timeout=10)
             except TypeError:
-                self.session.get(f"{base}/manage.php")
+                self.session.get(f"{base}/manage.html")
             except Exception:
                 pass
             self.refresh_log_display()
