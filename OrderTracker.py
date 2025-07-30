@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog, scrolledtext, ttk
+from tkinterweb import HtmlFrame
 import requests
 import threading
 from bs4 import BeautifulSoup
@@ -140,6 +141,32 @@ class YBSScraperApp:
         self.status_label.pack(fill="x", padx=10, pady=(0, 10))
 
         self.start_update_loop()
+
+        # open the manage page window after widgets are placed
+        self.root.after(100, self.show_manage_page)
+
+    def show_manage_page(self):
+        """Display manage.html in a separate window to the left of the main GUI."""
+        if getattr(self, "manage_window", None) and self.manage_window.winfo_exists():
+            self.manage_window.lift()
+            return
+
+        self.root.update_idletasks()
+        width = 600
+        height = self.root.winfo_height()
+        x = self.root.winfo_rootx() - width
+        y = self.root.winfo_rooty()
+        self.manage_window = tk.Toplevel(self.root)
+        self.manage_window.title("Manage Page")
+        self.manage_window.geometry(f"{width}x{height}+{x}+{y}")
+        frame = HtmlFrame(
+            self.manage_window,
+            vertical_scrollbar=True,
+            horizontal_scrollbar=True,
+            zoom=0.8,
+        )
+        frame.pack(fill="both", expand=True)
+        frame.load_website("https://www.ybsnow.com/manage.html")
 
     def save_creds(self):
         self.settings["username"] = self.username.get()
