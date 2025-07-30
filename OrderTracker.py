@@ -395,11 +395,11 @@ class YBSScraperApp:
         self.orders_on_select = on_select
         listbox.bind("<<ListboxSelect>>", on_select)
 
-        tk.Button(win, text="Close", command=win.destroy).pack(pady=4)
-
         def on_close():
             self.orders_window = None
             win.destroy()
+
+        tk.Button(win, text="Close", command=on_close).pack(pady=4)
 
         win.protocol("WM_DELETE_WINDOW", on_close)
 
@@ -478,12 +478,12 @@ class YBSScraperApp:
 
         self.populate_current_orders()
 
-        tk.Button(win, text="Close", command=win.destroy).pack(pady=4)
-
         def on_close():
             self.order_table_win = None
             self.order_tree = None
             win.destroy()
+
+        tk.Button(win, text="Close", command=on_close).pack(pady=4)
 
         win.protocol("WM_DELETE_WINDOW", on_close)
 
