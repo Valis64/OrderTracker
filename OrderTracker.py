@@ -246,6 +246,10 @@ class YBSScraperApp:
             "%m/%d/%y %H:%M:%S",
             "%m/%d/%y %I:%M %p",
             "%m/%d/%y %I:%M:%S %p",
+            "%m/%d/%Y %H:%M",
+            "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y %I:%M %p",
+            "%m/%d/%Y %I:%M:%S %p",
         ]
         for fmt in formats:
             try:
