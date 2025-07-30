@@ -66,6 +66,7 @@ class YBSScraperApp:
         )
         self.conn.commit()
 
+        self.session = requests.Session()
         self.create_gui()
 
         # Load current orders immediately if credentials are available.
@@ -542,19 +543,27 @@ class YBSScraperApp:
         self.activity_text.see(tk.END)
         self.activity_text.config(state="disabled")
 
+    def ensure_login(self):
+        """Make sure the session is logged in. Return True on success."""
+        if not self.do_login(self.session):
+            # start a new session and try again
+            self.session = requests.Session()
+            if not self.do_login(self.session):
+                return False
+        return True
+
     def update_once(self, silent=False):
         """Fetch the manage page and update order data."""
         self.status_var.set("Updating...")
         self.log_activity("Fetching orders")
-        session = requests.Session()
-        if self.do_login(session):
-            new_events = self.update_orders(session)
+        if self.ensure_login():
+            new_events = self.update_orders(self.session)
             # fetch page to keep session current but ignore contents
             base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
             try:
-                session.get(f"{base}/manage.html", timeout=10)
+                self.session.get(f"{base}/manage.html", timeout=10)
             except TypeError:
-                session.get(f"{base}/manage.html")
+                self.session.get(f"{base}/manage.html")
             except Exception:
                 pass
             self.refresh_log_display()
@@ -590,12 +599,11 @@ class YBSScraperApp:
             messagebox.showerror("Missing", "Please enter an order number.")
             return
 
-        session = requests.Session()
-        if not self.do_login(session):
+        if not self.ensure_login():
             messagebox.showerror("Error", "Login failed! Please check credentials.")
             return
 
-        self.update_orders(session)
+        self.update_orders(self.session)
 
         data = self.get_order_data(order_num)
         if not data:
