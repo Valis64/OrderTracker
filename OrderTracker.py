@@ -51,6 +51,13 @@ class YBSScraperApp:
         self.conn.commit()
 
         self.create_gui()
+
+        # Load current orders immediately if credentials are available.
+        if self.settings.get("username") and self.settings.get("password"):
+            try:
+                self.update_once()
+            except Exception as e:
+                logging.exception("Initial load failed: %s", e)
     
     def create_gui(self):
         self.frame = tk.Frame(self.root)
