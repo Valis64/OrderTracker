@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, filedialog, scrolledtext
+from tkinter import messagebox, filedialog, scrolledtext, ttk
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -48,6 +48,20 @@ class YBSScraperApp:
             )
             """
         )
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS current_orders (
+                order_num TEXT PRIMARY KEY,
+                indigo TEXT,
+                laminate TEXT,
+                die_cutting_abg TEXT,
+                machine_glue TEXT,
+                shipping TEXT,
+                last_seen TEXT,
+                active INTEGER DEFAULT 1
+            )
+            """
+        )
         self.conn.commit()
 
         self.create_gui()
@@ -93,6 +107,9 @@ class YBSScraperApp:
 
         self.fetch_btn = tk.Button(self.frame, text="Fetch Orders Now", command=self.manual_fetch)
         self.fetch_btn.grid(row=8, column=0, columnspan=2, pady=4)
+
+        self.table_btn = tk.Button(self.frame, text="Show Order Table", command=self.show_current_orders)
+        self.table_btn.grid(row=9, column=0, columnspan=2, pady=4)
 
         # last record display
         self.last_frame = tk.Frame(self.root)
@@ -251,29 +268,54 @@ class YBSScraperApp:
 
         inserted = 0
         cur = self.conn.cursor()
+        seen = set()
+        now_iso = datetime.now().isoformat(sep=" ")
+
         for row in soup.find_all("tr"):
             cols = [col.get_text(strip=True) for col in row.find_all("td")]
-            if not cols:
-                continue
-            if not cols[0].startswith("YBS"):
+            if not cols or not cols[0].startswith("YBS"):
                 continue
             parts = cols[0].split()
             if len(parts) < 2:
                 logging.warning("Unexpected row format: %s", cols[0])
                 continue
             order_num = parts[1]
+            seen.add(order_num)
             timestamps = cols[-len(WORKSTATIONS) :]
+
+            values = []
             for ws, ts in zip(WORKSTATIONS, timestamps):
                 dt = self.parse_datetime(ts)
-                if not dt:
-                    continue
-                iso = dt.isoformat(sep=" ")
-                cur.execute(
-                    "INSERT OR IGNORE INTO events(order_num, workstation, timestamp) VALUES(?, ?, ?)",
-                    (order_num, ws, iso),
-                )
-                if cur.rowcount:
-                    inserted += 1
+                iso = dt.isoformat(sep=" ") if dt else None
+                values.append(iso)
+                if dt:
+                    cur.execute(
+                        "INSERT OR IGNORE INTO events(order_num, workstation, timestamp) VALUES(?, ?, ?)",
+                        (order_num, ws, iso),
+                    )
+                    if cur.rowcount:
+                        inserted += 1
+
+            cur.execute(
+                """
+                INSERT INTO current_orders(order_num, indigo, laminate, die_cutting_abg, machine_glue, shipping, last_seen, active)
+                VALUES(?, ?, ?, ?, ?, ?, ?, 1)
+                ON CONFLICT(order_num) DO UPDATE SET
+                    indigo=excluded.indigo,
+                    laminate=excluded.laminate,
+                    die_cutting_abg=excluded.die_cutting_abg,
+                    machine_glue=excluded.machine_glue,
+                    shipping=excluded.shipping,
+                    last_seen=excluded.last_seen,
+                    active=1
+                """,
+                (order_num, *values, now_iso),
+            )
+
+        # mark orders that disappeared
+        existing = [r[0] for r in cur.execute("SELECT order_num FROM current_orders WHERE active=1")]
+        for order in set(existing) - seen:
+            cur.execute("UPDATE current_orders SET active=0 WHERE order_num=?", (order,))
 
         self.conn.commit()
         return inserted
@@ -382,6 +424,78 @@ class YBSScraperApp:
             listbox.activate(idx)
             self.update_order_details(selected)
 
+    def show_current_orders(self):
+        """Display a table of the latest order status."""
+        if getattr(self, "order_table_win", None) and self.order_table_win.winfo_exists():
+            self.order_table_win.lift()
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("Current Orders")
+
+        columns = [
+            "order_num",
+            "indigo",
+            "laminate",
+            "die_cutting_abg",
+            "machine_glue",
+            "shipping",
+            "last_seen",
+            "active",
+        ]
+        headings = [
+            "Order",
+            "Indigo",
+            "Laminate",
+            "Die Cutting ABG",
+            "Machine Glue",
+            "Shipping",
+            "Last Seen",
+            "Active",
+        ]
+
+        tree = ttk.Treeview(win, columns=columns, show="headings")
+        for col, head in zip(columns, headings):
+            tree.heading(col, text=head)
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.order_table_win = win
+        self.order_tree = tree
+
+        self.populate_current_orders()
+
+        tk.Button(win, text="Close", command=win.destroy).pack(pady=4)
+
+        def on_close():
+            self.order_table_win = None
+            self.order_tree = None
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", on_close)
+
+    def populate_current_orders(self):
+        if not getattr(self, "order_tree", None):
+            return
+        tree = self.order_tree
+        cur = self.conn.cursor()
+        rows = list(
+            cur.execute(
+                """
+                SELECT order_num, indigo, laminate, die_cutting_abg, machine_glue,
+                       shipping, last_seen, active
+                FROM current_orders ORDER BY order_num
+                """
+            )
+        )
+        tree.delete(*tree.get_children())
+        for row in rows:
+            display = list(row)
+            display[-1] = "Yes" if row[-1] else "No"
+            tree.insert("", tk.END, values=display)
+
+    def refresh_current_orders(self):
+        self.populate_current_orders()
+
     def refresh_log_display(self):
         cur = self.conn.cursor()
         rows = list(
@@ -430,6 +544,7 @@ class YBSScraperApp:
             self.refresh_log_display()
             self.refresh_last_record()
             self.refresh_orders_window()
+            self.refresh_current_orders()
             self.status_var.set(
                 f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
