@@ -300,6 +300,10 @@ class YBSScraperApp:
 
     def show_orders_window(self):
         """Display a list of order numbers stored in the database."""
+        if getattr(self, "orders_window", None) and self.orders_window.winfo_exists():
+            self.orders_window.lift()
+            return
+
         win = tk.Toplevel(self.root)
         win.title("Orders")
 
@@ -316,25 +320,67 @@ class YBSScraperApp:
         details = scrolledtext.ScrolledText(frame, width=50)
         details.pack(side="left", fill="both", expand=True, padx=(10, 0))
 
+        self.orders_window = win
+        self.orders_listbox = listbox
+        self.orders_details = details
+
         cur = self.conn.cursor()
         order_nums = [row[0] for row in cur.execute("SELECT DISTINCT order_num FROM events ORDER BY order_num")]
         for num in order_nums:
             listbox.insert(tk.END, num)
 
-        def on_select(event):
+        def on_select(event=None):
             sel = listbox.curselection()
             if not sel:
                 return
             order = listbox.get(sel[0])
-            data = self.get_order_data(order)
-            details.delete("1.0", tk.END)
-            for ws, end_time, dur in data:
-                dur_str = f"{dur:.2f}" if dur is not None else ""
-                details.insert(tk.END, f"{ws} - {end_time} - {dur_str}\n")
+            self.update_order_details(order)
 
+        self.orders_on_select = on_select
         listbox.bind("<<ListboxSelect>>", on_select)
 
         tk.Button(win, text="Close", command=win.destroy).pack(pady=4)
+
+        def on_close():
+            self.orders_window = None
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", on_close)
+
+    def update_order_details(self, order_num):
+        """Populate the details pane for ``order_num``."""
+        if not getattr(self, "orders_details", None):
+            return
+        data = self.get_order_data(order_num)
+        self.orders_details.delete("1.0", tk.END)
+        for ws, end_time, dur in data:
+            dur_str = f"{dur:.2f}" if dur is not None else ""
+            self.orders_details.insert(tk.END, f"{ws} - {end_time} - {dur_str}\n")
+
+    def refresh_orders_window(self):
+        """Update the order list and details pane if the window is open."""
+        if not getattr(self, "orders_window", None):
+            return
+        if not self.orders_window.winfo_exists():
+            self.orders_window = None
+            return
+
+        listbox = self.orders_listbox
+        cur_selection = listbox.curselection()
+        selected = listbox.get(cur_selection[0]) if cur_selection else None
+
+        cur = self.conn.cursor()
+        order_nums = [row[0] for row in cur.execute("SELECT DISTINCT order_num FROM events ORDER BY order_num")]
+
+        listbox.delete(0, tk.END)
+        for num in order_nums:
+            listbox.insert(tk.END, num)
+
+        if selected and selected in order_nums:
+            idx = order_nums.index(selected)
+            listbox.selection_set(idx)
+            listbox.activate(idx)
+            self.update_order_details(selected)
 
     def refresh_log_display(self):
         cur = self.conn.cursor()
@@ -383,6 +429,7 @@ class YBSScraperApp:
                 pass
             self.refresh_log_display()
             self.refresh_last_record()
+            self.refresh_orders_window()
             self.status_var.set(
                 f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
