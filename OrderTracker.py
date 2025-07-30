@@ -37,7 +37,8 @@ class YBSScraperApp:
         self.settings = load_settings()
 
         # database setup
-        self.conn = sqlite3.connect(DB_FILE)
+        # allow using the connection from the background update thread
+        self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
         c = self.conn.cursor()
         c.execute(
             """
