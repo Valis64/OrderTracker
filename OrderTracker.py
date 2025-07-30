@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog, scrolledtext
-from tkhtmlview import HTMLScrolledText
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -87,10 +86,6 @@ class YBSScraperApp:
 
         self.fetch_btn = tk.Button(self.frame, text="Fetch Orders Now", command=self.manual_fetch)
         self.fetch_btn.grid(row=8, column=0, columnspan=2, pady=4)
-
-        # HTML preview with scrolling
-        self.web = HTMLScrolledText(self.root, html="")
-        self.web.pack(fill="both", expand=True, padx=10, pady=10)
 
         # last record display
         self.last_frame = tk.Frame(self.root)
@@ -373,10 +368,10 @@ class YBSScraperApp:
         session = requests.Session()
         if self.do_login(session):
             new_events = self.update_orders(session)
+            # fetch page to keep session current but ignore contents
+            base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
             try:
-                base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
-                page = session.get(f"{base}/manage.html")
-                self.web.set_html(page.text)
+                session.get(f"{base}/manage.html")
             except Exception:
                 pass
             self.refresh_log_display()
