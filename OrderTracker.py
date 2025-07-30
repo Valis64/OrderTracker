@@ -77,7 +77,11 @@ class YBSScraperApp:
                 logging.exception("Initial load failed: %s", e)
     
     def create_gui(self):
-        self.frame = tk.Frame(self.root)
+        # container for all controls and logs on the left side
+        self.main_area = tk.Frame(self.root)
+        self.main_area.pack(side="left", fill="both", expand=True)
+
+        self.frame = tk.Frame(self.main_area)
         self.frame.pack(padx=10, pady=10)
 
         tk.Label(self.frame, text="YBS Username:").grid(row=0, column=0, sticky="e")
@@ -115,7 +119,7 @@ class YBSScraperApp:
         self.table_btn.grid(row=9, column=0, columnspan=2, pady=4)
 
         # last record display
-        self.last_frame = tk.Frame(self.root)
+        self.last_frame = tk.Frame(self.main_area)
         self.last_frame.pack(fill="x", padx=10, pady=(0, 10))
         tk.Label(self.last_frame, text="Order #:").grid(row=0, column=0, sticky="e")
         self.last_order_entry = tk.Entry(self.last_frame, state="readonly", width=15)
@@ -128,16 +132,16 @@ class YBSScraperApp:
         self.last_ts_entry.grid(row=0, column=5)
 
         # log of latest events
-        self.log_text = scrolledtext.ScrolledText(self.root, height=10)
+        self.log_text = scrolledtext.ScrolledText(self.main_area, height=10)
         self.log_text.pack(fill="both", expand=True, padx=10, pady=10)
 
         # activity log to show program operations
-        self.activity_text = scrolledtext.ScrolledText(self.root, height=5, state="disabled")
+        self.activity_text = scrolledtext.ScrolledText(self.main_area, height=5, state="disabled")
         self.activity_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         # status indicator
         self.status_var = tk.StringVar(value="Idle")
-        self.status_label = tk.Label(self.root, textvariable=self.status_var, anchor="w")
+        self.status_label = tk.Label(self.main_area, textvariable=self.status_var, anchor="w")
         self.status_label.pack(fill="x", padx=10, pady=(0, 10))
 
         self.start_update_loop()
@@ -146,21 +150,15 @@ class YBSScraperApp:
         self.root.after(100, self.show_manage_page)
 
     def show_manage_page(self):
-        """Display manage.html in a separate window to the left of the main GUI."""
-        if getattr(self, "manage_window", None) and self.manage_window.winfo_exists():
-            self.manage_window.lift()
+        """Display manage.html in a frame on the right side of the GUI."""
+        if getattr(self, "manage_frame", None):
             return
 
-        self.root.update_idletasks()
-        width = 600
-        height = self.root.winfo_height()
-        x = self.root.winfo_rootx() - width
-        y = self.root.winfo_rooty()
-        self.manage_window = tk.Toplevel(self.root)
-        self.manage_window.title("Manage Page")
-        self.manage_window.geometry(f"{width}x{height}+{x}+{y}")
+        self.manage_frame = tk.Frame(self.root, width=600)
+        self.manage_frame.pack(side="right", fill="y", padx=(0, 10), pady=10)
+
         frame = HtmlFrame(
-            self.manage_window,
+            self.manage_frame,
             vertical_scrollbar=True,
             horizontal_scrollbar=True,
             zoom=0.8,
