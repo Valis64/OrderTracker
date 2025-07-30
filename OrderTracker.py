@@ -85,6 +85,9 @@ class YBSScraperApp:
         self.view_btn = tk.Button(self.frame, text="View Orders", command=self.show_orders_window)
         self.view_btn.grid(row=7, column=0, columnspan=2, pady=4)
 
+        self.fetch_btn = tk.Button(self.frame, text="Fetch Orders Now", command=self.manual_fetch)
+        self.fetch_btn.grid(row=8, column=0, columnspan=2, pady=4)
+
         # HTML preview with scrolling
         self.web = HTMLScrolledText(self.root, html="")
         self.web.pack(fill="both", expand=True, padx=10, pady=10)
@@ -105,6 +108,10 @@ class YBSScraperApp:
         # log of latest events
         self.log_text = scrolledtext.ScrolledText(self.root, height=10)
         self.log_text.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # activity log to show program operations
+        self.activity_text = scrolledtext.ScrolledText(self.root, height=5, state="disabled")
+        self.activity_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         # status indicator
         self.status_var = tk.StringVar(value="Idle")
@@ -236,9 +243,12 @@ class YBSScraperApp:
             resp = session.get(url)
         except requests.exceptions.RequestException as e:
             messagebox.showerror("Network Error", f"Failed to update orders: {e}")
-            return
+            return 0
+
         soup = BeautifulSoup(resp.text, "html.parser")
 
+        inserted = 0
+        cur = self.conn.cursor()
         for row in soup.find_all("tr"):
             cols = [col.get_text(strip=True) for col in row.find_all("td")]
             if not cols:
@@ -256,12 +266,15 @@ class YBSScraperApp:
                 if not dt:
                     continue
                 iso = dt.isoformat(sep=" ")
-                cur = self.conn.cursor()
                 cur.execute(
                     "INSERT OR IGNORE INTO events(order_num, workstation, timestamp) VALUES(?, ?, ?)",
                     (order_num, ws, iso),
                 )
-                self.conn.commit()
+                if cur.rowcount:
+                    inserted += 1
+
+        self.conn.commit()
+        return inserted
 
     def get_order_data(self, order_num):
         cur = self.conn.cursor()
@@ -345,11 +358,21 @@ class YBSScraperApp:
             widget.insert(0, value)
             widget.config(state="readonly")
 
-    def update_loop(self):
+    def log_activity(self, message):
+        """Append a timestamped message to the activity log."""
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.activity_text.config(state="normal")
+        self.activity_text.insert(tk.END, f"{ts} - {message}\n")
+        self.activity_text.see(tk.END)
+        self.activity_text.config(state="disabled")
+
+    def update_once(self):
+        """Fetch the manage page and update order data."""
         self.status_var.set("Updating...")
+        self.log_activity("Fetching orders")
         session = requests.Session()
         if self.do_login(session):
-            self.update_orders(session)
+            new_events = self.update_orders(session)
             try:
                 base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
                 page = session.get(f"{base}/manage.html")
@@ -361,13 +384,22 @@ class YBSScraperApp:
             self.status_var.set(
                 f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
+            self.log_activity(f"Update complete ({new_events} new events)")
         else:
             messagebox.showerror("Login Failed", "Could not log in to YBS.")
             self.status_var.set("Update failed")
+            self.log_activity("Login failed")
+
+    def update_loop(self):
+        self.update_once()
         self.root.after(60000, self.update_loop)
 
     def start_update_loop(self):
         self.root.after(0, self.update_loop)
+
+    def manual_fetch(self):
+        """Handler for the Fetch Orders Now button."""
+        self.update_once()
 
     def scrape_and_export(self):
         order_num = self.order_entry.get().strip()
