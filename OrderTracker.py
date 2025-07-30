@@ -164,7 +164,29 @@ class YBSScraperApp:
             zoom=0.8,
         )
         frame.pack(fill="both", expand=True)
-        frame.load_website("https://www.ybsnow.com/manage.html")
+        self.manage_html_frame = frame
+        self.reload_manage_page()
+
+    def reload_manage_page(self, session=None):
+        """Load ``manage.html`` into the embedded browser using an authenticated session."""
+        if not getattr(self, "manage_html_frame", None):
+            return
+        if session is None:
+            session = requests.Session()
+            if not self.do_login(session):
+                base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
+                self.manage_html_frame.load_website(f"{base}/manage.html")
+                return
+
+        base = self.settings.get("base_url", "https://www.ybsnow.com").rstrip("/")
+        try:
+            resp = session.get(f"{base}/manage.html", timeout=10)
+        except TypeError:
+            resp = session.get(f"{base}/manage.html")
+        except Exception:
+            self.manage_html_frame.load_website(f"{base}/manage.html")
+            return
+        self.manage_html_frame.load_html(resp.text, f"{base}/manage.html")
 
     def save_creds(self):
         self.settings["username"] = self.username.get()
@@ -302,6 +324,17 @@ class YBSScraperApp:
         except requests.exceptions.RequestException as e:
             logging.error("Failed to update orders: %s", e)
             return 0
+
+        resp_url = getattr(resp, "url", url)
+        if "login" in resp_url.lower() or "type=\"password\"" in resp.text.lower():
+            if self.do_login(session):
+                try:
+                    resp = session.get(url, timeout=10)
+                except TypeError:
+                    resp = session.get(url)
+                except requests.exceptions.RequestException as e:
+                    logging.error("Failed to update orders after re-login: %s", e)
+                    return 0
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -582,6 +615,7 @@ class YBSScraperApp:
                 session.get(f"{base}/manage.html")
             except Exception:
                 pass
+            self.reload_manage_page(session)
             self.refresh_log_display()
             self.refresh_last_record()
             self.refresh_orders_window()
@@ -619,8 +653,8 @@ class YBSScraperApp:
         if not self.do_login(session):
             messagebox.showerror("Error", "Login failed! Please check credentials.")
             return
-
         self.update_orders(session)
+        self.reload_manage_page(session)
 
         data = self.get_order_data(order_num)
         if not data:
