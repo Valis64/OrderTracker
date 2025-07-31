@@ -413,6 +413,71 @@ class YBSScraperApp:
             results.append((ws, dt.strftime("%m/%d/%y %H:%M"), dur))
         return results
 
+    def calculate_lead_times(self, start, end):
+        """Return lead-time data for orders completed within ``start`` and ``end``.
+
+        ``start`` and ``end`` should be ``datetime`` objects. The method looks
+        for orders with a ``Shipping`` timestamp in this range and returns a
+        list of dictionaries with the time (in hours) spent at each workstation
+        as well as the total lead time for the job.
+        """
+
+        start_iso = start.isoformat(sep=" ")
+        end_iso = end.isoformat(sep=" ")
+        cur = self.conn.cursor()
+        completed = [
+            r[0]
+            for r in cur.execute(
+                """
+                SELECT DISTINCT order_num FROM events
+                WHERE workstation='Shipping' AND timestamp BETWEEN ? AND ?
+                ORDER BY order_num
+                """,
+                (start_iso, end_iso),
+            )
+        ]
+
+        results = []
+        for order in completed:
+            rows = list(
+                cur.execute(
+                    "SELECT workstation, timestamp FROM events WHERE order_num=? AND workstation IN ({}) ORDER BY timestamp".format(
+                        ",".join("?" * len(WORKSTATIONS))
+                    ),
+                    (order, *WORKSTATIONS),
+                )
+            )
+            if not rows:
+                continue
+
+            parsed = [(ws, datetime.fromisoformat(ts)) for ws, ts in rows]
+            durations = {ws: None for ws in WORKSTATIONS}
+            for i in range(len(parsed) - 1):
+                ws, dt = parsed[i]
+                next_dt = parsed[i + 1][1]
+                durations[ws] = (next_dt - dt).total_seconds() / 3600.0
+
+            total = (parsed[-1][1] - parsed[0][1]).total_seconds() / 3600.0
+            results.append({"order_num": order, "durations": durations, "total": total})
+
+        return results
+
+    def write_lead_time_csv(self, data, file_path):
+        """Write lead time ``data`` to ``file_path``."""
+
+        headers = ["Job"] + WORKSTATIONS + ["Total Hours"]
+        with open(file_path, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(headers)
+            for row in data:
+                durations = [row["durations"].get(ws) for ws in WORKSTATIONS]
+                fmt = lambda x: f"{x:.2f}" if x is not None else ""
+                writer.writerow(
+                    [row["order_num"]]
+                    + [fmt(d) for d in durations]
+                    + [fmt(row["total"])]
+                )
+
     def show_orders_window(self):
         """Display a list of order numbers stored in the database."""
         if getattr(self, "orders_window", None) and self.orders_window.winfo_exists():
@@ -674,6 +739,55 @@ class YBSScraperApp:
             messagebox.showinfo("Done", f"Exported order {order_num} data.")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = YBSScraperApp(root)
-    root.mainloop()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="YBS Order Tracker")
+    parser.add_argument(
+        "--lead-time",
+        nargs=3,
+        metavar=("START", "END", "CSV"),
+        help="Generate lead time report between START and END (YYYY-MM-DD) and save to CSV",
+    )
+    args = parser.parse_args()
+
+    if args.lead_time:
+        start_str, end_str, csv_path = args.lead_time
+        start_dt = datetime.fromisoformat(start_str)
+        end_dt = datetime.fromisoformat(end_str)
+
+        app = YBSScraperApp.__new__(YBSScraperApp)
+        app.settings = load_settings()
+        app.conn = sqlite3.connect(DB_FILE)
+        c = app.conn.cursor()
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS events (
+                order_num TEXT,
+                workstation TEXT,
+                timestamp TEXT,
+                UNIQUE(order_num, workstation, timestamp)
+            )
+            """
+        )
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS current_orders (
+                order_num TEXT PRIMARY KEY,
+                indigo TEXT,
+                laminate TEXT,
+                die_cutting_abg TEXT,
+                machine_glue TEXT,
+                shipping TEXT,
+                last_seen TEXT,
+                active INTEGER DEFAULT 1
+            )
+            """
+        )
+        app.conn.commit()
+
+        data = app.calculate_lead_times(start_dt, end_dt)
+        app.write_lead_time_csv(data, csv_path)
+    else:
+        root = tk.Tk()
+        app = YBSScraperApp(root)
+        root.mainloop()
