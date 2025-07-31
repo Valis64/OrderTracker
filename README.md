@@ -27,3 +27,17 @@ site using the `tkinterweb` widget so you can monitor the page directly within
 the application. The browser is loaded using the application's authenticated
 session so it remains logged in. The scraper always pulls data from
 `manage.html`, never from the login page.
+
+## Lead Time Report
+
+You can generate a CSV report summarising how long jobs spent in each queue. Use
+the `--lead-time` command line option and provide start and end dates in
+`YYYY-MM-DD` format followed by the output file path:
+
+```bash
+python OrderTracker.py --lead-time 2023-09-01 2023-09-30 report.csv
+```
+
+The script looks for orders with a `Shipping` timestamp between the given dates.
+Each row in the CSV contains the order number, hours spent at each workstation,
+and the total lead time from the first to the last recorded station.
