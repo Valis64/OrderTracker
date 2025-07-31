@@ -245,9 +245,10 @@ class YBSScraperApp:
             if not name:
                 continue
             value = inp.get("value", "")
-            if "user" in name.lower():
+            lower_name = name.lower()
+            if any(x in lower_name for x in ("user", "email", "login")):
                 data[name] = username
-            elif "pass" in name.lower():
+            elif "pass" in lower_name:
                 data[name] = password
             else:
                 data[name] = value
